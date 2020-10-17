@@ -4,7 +4,6 @@
             [jackdaw.client.log :as jcl]
             [jackdaw.admin :as ja]
             [jackdaw.serdes.edn :refer [serde]]
-            [clojure.spec.alpha :as s]
             [cheshire.core :as json]
             [energy-api.db :as db]))
 
@@ -25,13 +24,6 @@
 ;; Each topic needs a config. The important part to note is the :topic-name key.
 (def device-events-topic
   (merge {:topic-name         "device-events"
-          :partition-count    1
-          :replication-factor 1
-          :topic-config       {}}
-         serdes))
-
-(def device-state-topic
-  (merge {:topic-name         "device-state"
           :partition-count    1
           :replication-factor 1
           :topic-config       {}}
@@ -66,12 +58,9 @@
                       charging-state (< initial-charge current-charge)]
                   (println "charging state for device" device-id "is" charging-state)
                   [device-id charging-state])))
-      (js/map (fn [[device-id charging-state]]
-                (println "processing charge event")
-                (db/write-device-state device-id charging-state)
-                [device-id charging-state]))
-      (js/to device-state-topic)))
-
+      (js/for-each! (fn [[device-id charging-state]]
+                      (println "processing charge event")
+                      (db/write-device-state device-id charging-state)))))
 
 (defn start! []
   "Starts the simple topology"
@@ -85,7 +74,7 @@
   (js/close kafka-streams-app))
 
 (defn refresh-topics []
-  (let [topics [device-events-topic device-state-topic]]
+  (let [topics [device-events-topic]]
     (ja/delete-topics! admin-client topics)
     (ja/create-topics! admin-client topics)))
 
