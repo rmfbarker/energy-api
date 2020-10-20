@@ -47,19 +47,17 @@
          (map :value)
          doall)))
 
+(defn is-charging? [event-data]
+  (-> event-data
+      json/decode
+      (get "charging")
+      (> 0)))
+
 (defn simple-device-topology [builder]
   (-> (js/kstream builder device-events-topic)
-      (js/map (fn [[device-id event-data]]
-                (let [charge-events  (clojure.string/split-lines event-data)
-                      charging       (map (comp :charging #(json/decode % true))
-                                          charge-events)
-                      initial-charge (first charging)
-                      current-charge (last charging)
-                      charging-state (< initial-charge current-charge)]
-                  (println "charging state for device" device-id "is" charging-state)
-                  [device-id charging-state])))
+      (js/map-values (comp last clojure.string/split-lines))
+      (js/map-values is-charging?)
       (js/for-each! (fn [[device-id charging-state]]
-                      (println "processing charge event")
                       (db/write-device-state device-id charging-state)))))
 
 (defn start! []
@@ -87,8 +85,5 @@
   (view-messages device-events-topic)
 
   ;; Stop the topology
-  (stop! kafka-streams-app)
-
-
-  )
+  (stop! kafka-streams-app))
 
